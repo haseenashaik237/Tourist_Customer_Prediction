@@ -1,0 +1,68 @@
+name: tourist-customer-mlops-pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-train-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      # Used by all our scripts (data_register, data_prep, model_train, deploy_to_hf_space)
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+    steps:
+      # -------------------------
+      # 1) Check out repository
+      # -------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # 2) Set up Python
+      # -------------------------
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # -------------------------
+      # 3) Install dependencies
+      # -------------------------
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Core training + HF + deployment dependencies
+          pip install -r tourist_customer_prediction/model_deployment/requirements.txt
+          pip install datasets huggingface_hub scikit-learn joblib
+
+      # -------------------------
+      # 4) Data Registration
+      # -------------------------
+      - name: Data Registration - Upload raw data to HF Dataset Hub
+        run: |
+          python tourist_customer_prediction/model_building/data_register.py
+
+      # -------------------------
+      # 5) Data Preparation
+      # -------------------------
+      - name: Data Preparation - Clean, split, upload train/test
+        run: |
+          python tourist_customer_prediction/model_building/data_prep.py
+
+      # -------------------------
+      # 6) Model Training + Registration
+      # -------------------------
+      - name: Model Training - Tune, evaluate, register best model to HF Model Hub
+        run: |
+          python tourist_customer_prediction/model_building/model_train.py
+
+      # -------------------------
+      # 7) Deployment to HF Space
+      # -------------------------
+      - name: Deployment - Push Streamlit app & artifacts to HF Space
+        run: |
+          python tourist_customer_prediction/model_deployment/deploy_to_hf_space.py
