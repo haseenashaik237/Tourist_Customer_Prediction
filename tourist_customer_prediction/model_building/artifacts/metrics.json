@@ -1,0 +1,15 @@
+{
+    "best_params": {
+        "model__n_estimators": 100,
+        "model__min_samples_split": 2,
+        "model__min_samples_leaf": 1,
+        "model__max_features": null,
+        "model__max_depth": 5
+    },
+    "best_cv_f1": 0.20931031281908474,
+    "test_metrics": {
+        "accuracy": 0.2719298245614035,
+        "f1": 0.29461756373937675,
+        "roc_auc": 0.4670893719806763
+    }
+}
