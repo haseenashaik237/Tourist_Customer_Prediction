@@ -1,68 +1,74 @@
-name: tourist-customer-mlops-pipeline
+name: Tourist Customer Prediction MLS pipeline
 
 on:
   push:
     branches:
-      - main
+      - main      # auto-trigger on push to main
   workflow_dispatch:
 
 jobs:
-  build-train-deploy:
+
+  register-dataset:
     runs-on: ubuntu-latest
-
     env:
-      # Used by all our scripts (data_register, data_prep, model_train, deploy_to_hf_space)
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
-
     steps:
-      # -------------------------
-      # 1) Check out repository
-      # -------------------------
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # -------------------------
-      # 2) Set up Python
-      # -------------------------
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      # -------------------------
-      # 3) Install dependencies
-      # -------------------------
-      - name: Install Python dependencies
+      - uses: actions/checkout@v4
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Core training + HF + deployment dependencies
-          pip install -r tourist_customer_prediction/model_deployment/requirements.txt
-          pip install datasets huggingface_hub scikit-learn joblib
-
-      # -------------------------
-      # 4) Data Registration
-      # -------------------------
-      - name: Data Registration - Upload raw data to HF Dataset Hub
+          pip install -r tourist_customer_prediction/requirements.txt
+      - name: Upload Dataset to Hugging Face Hub
         run: |
           python tourist_customer_prediction/model_building/data_register.py
 
-      # -------------------------
-      # 5) Data Preparation
-      # -------------------------
-      - name: Data Preparation - Clean, split, upload train/test
+  data-prep:
+    needs: register-dataset
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tourist_customer_prediction/requirements.txt
+      - name: Run Data Preparation
         run: |
           python tourist_customer_prediction/model_building/data_prep.py
 
-      # -------------------------
-      # 6) Model Training + Registration
-      # -------------------------
-      - name: Model Training - Tune, evaluate, register best model to HF Model Hub
+  model-training:
+    needs: data-prep
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      MLFLOW_TRACKING_URI: http://127.0.0.1:5000
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tourist_customer_prediction/requirements.txt
+      - name: Start MLflow UI Server
+        run: |
+          nohup mlflow ui --host 0.0.0.0 --port 5000 &
+          sleep 5
+      - name: Train Model, Log to MLflow, Register to HF Model Hub
         run: |
           python tourist_customer_prediction/model_building/model_train.py
 
-      # -------------------------
-      # 7) Deployment to HF Space
-      # -------------------------
-      - name: Deployment - Push Streamlit app & artifacts to HF Space
+  deploy-hosting:
+    needs: [model-training, data-prep, register-dataset]
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Dependencies
         run: |
-          python tourist_customer_prediction/model_deployment/deploy_to_hf_space.py
+          python -m pip install --upgrade pip
+          pip install -r tourist_customer_prediction/requirements.txt
+      - name: Push files to Frontend Hugging Face Space
+        run: |
+          python tourist_customer_prediction/hosting/hosting.py
+
